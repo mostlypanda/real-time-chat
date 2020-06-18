@@ -1,42 +1,75 @@
-const path=require('path');
-const express=require('express');
-const http=require('http');
-const socketio=require('socket.io');
-var siofu = require("socketio-file-upload");
+const path = require('path');
+const http = require('http');
+const express = require('express');
+const socketio = require('socket.io');
+const formatMessage = require('./utils/messages');
+const {
+  userJoin,
+  getCurrentUser,
+  userLeave,
+  getRoomUsers
+} = require('./utils/user');
 
+const app = express();
+const server = http.createServer(app);
+const io = socketio(server);
 
-const app=express();
-const server=http.createServer(app);
-const io=socketio(server);
-
-//set static folder
+// Set static folder
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(siofu.router);
 
-//Run when client connects
-io.on('connection',socket=>{
-    
-   //Welcome current user
-    socket.emit('message','Welcome to chatapp');
+const botName = 'ChatCord Bot';
 
+// Run when client connects
+io.on('connection', socket => {
+  socket.on('joinRoom', ({ username, room }) => {
+    const user = userJoin(socket.id, username, room);
 
-    //Broadcast when a user connect
-    socket.broadcast.emit('message', 'A user has joined the chat');
+    socket.join(user.room);
 
-    //runs when client disconnect
+    // Welcome current user
+    socket.emit('message', formatMessage(botName, 'Welcome to ChatCord!'));
 
-    socket.on('disconnect',()=>{
-        io.emit('message','A user has left the chat');
+    // Broadcast when a user connects
+    socket.broadcast
+      .to(user.room)
+      .emit(
+        'message',
+        formatMessage(botName, `${user.username} has joined the chat`)
+      );
+
+    // Send users and room info
+    io.to(user.room).emit('roomUsers', {
+      room: user.room,
+      users: getRoomUsers(user.room)
     });
+  });
 
+  // Listen for chatMessage
+  socket.on('chatMessage', msg => {
+    const user = getCurrentUser(socket.id);
 
-    //listen for chatmessage
-    socket.on('chatMessage',(msg)=>{
-        io.emit('message',msg);
-    });
-})
+    io.to(user.room).emit('message', formatMessage(user.username, msg));
+  });
 
+  // Runs when client disconnects
+  socket.on('disconnect', () => {
+    const user = userLeave(socket.id);
 
-const PORT=3000 || process.env.PORT;
+    if (user) {
+      io.to(user.room).emit(
+        'message',
+        formatMessage(botName, `${user.username} has left the chat`)
+      );
 
-server.listen(PORT,()=> console.log(`server running on port ${PORT}`));
+      // Send users and room info
+      io.to(user.room).emit('roomUsers', {
+        room: user.room,
+        users: getRoomUsers(user.room)
+      });
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
