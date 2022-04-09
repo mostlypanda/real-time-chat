@@ -19,7 +19,7 @@
   "homepage": "https://github.com/mostlypanda/real-time-chat#readme",
   "dependencies": {
     "express": "^4.17.1",
-    "moment": "^2.26.0",
+    "moment": "^2.29.2",
     "socket.io": "^2.3.0",
     "socketio-file-upload": "^0.7.2"
   },
